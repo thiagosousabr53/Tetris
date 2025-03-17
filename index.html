@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tetris</title>
+    <style>
+        body {
+            background-color: #f0f0f0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            font-family: Arial, sans-serif;
+        }
+        .game-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .game-header {
+            display: flex;
+            justify-content: space-between;
+            width: 300px;
+            margin-bottom: 10px;
+        }
+        .game-info {
+            font-size: 18px;
+            font-weight: bold;
+        }
+        canvas {
+            border: 2px solid #333;
+            background-color: #000;
+        }
+        .controls {
+            margin-top: 20px;
+            background-color: #ddd;
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+        }
+        .controls p {
+            margin: 5px 0;
+        }
+        .audio-controls {
+            margin-top: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .audio-controls button {
+            margin: 0 5px;
+            padding: 5px 10px;
+        }
+        /* Estilos para botões virtuais */
+        .mobile-controls {
+            display: none; /* Oculto por padrão */
+            flex-direction: column;
+            align-items: center;
+            margin-top: 20px;
+        }
+        .mobile-control-row {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 10px;
+        }
+        .mobile-controls button {
+            font-size: 24px;
+            padding: 15px;
+            margin: 5px;
+            border: none;
+            border-radius: 5px;
+            background-color: #ddd;
+            cursor: pointer;
+        }
+        .mobile-controls button:active {
+            background-color: #bbb;
+        }
+        @media (max-width: 768px) {
+            .mobile-controls {
+                display: flex; /* Exibe os controles no celular */
+                margin: 5px;
+                padding: 2px;
+                font-size: 20px;
+            }
+        }
+        /* ... outras regras CSS ... */
+
+        .controls p {
+            margin: 5px 0;
+        }
+
+        /* Regra para mobile */
+        @media (max-width: 768px) {
+            .controls p {
+                display: none; /* Oculta os parágrafos */
+            }
+        }
+       @media (max-width: 768px) {
+           .controls {
+           padding: 5px 5px;
+           margin-top: 5px;
+           }
+           h3 {
+                font-size: 16px;
+                margin: 5px 0;
+           }
+            }
+        
+    
+
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="game-header">
+            <div class="game-info">Pontos: <span id="score">0</span></div>
+            <div class="game-info">Nível: <span id="level">1</span></div>
+        </div>
+        <canvas id="tetris" width="300" height="600"></canvas>
+        <div class="controls">
+            <h3>Controles</h3>
+            <p>Setas esquerda/direita: Mover peça</p>
+            <p>Seta para cima: Rotacionar peça</p>
+            <p>Seta para baixo: Acelerar queda</p>
+            <p>Espaço: Queda instantânea</p>
+            <button id="startBtn">Iniciar/Reiniciar</button>
+            <div class="audio-controls">
+                <button id="musicToggle">Música: Off</button>
+                <input type="range" id="volumeControl" min="0" max="1" step="0.1" value="0.5">
+            </div>
+        </div>
+        <!-- Botões virtuais para celular -->
+        <div class="mobile-controls">
+            <div class="mobile-control-row">
+                <button id="leftBtn">←</button>
+                <button id="downBtn">↓</button>
+                <button id="rightBtn">→</button>
+            </div>
+            <div class="mobile-control-row">
+                <button id="rotateBtn">↻</button>
+                <button id="dropBtn">■</button>
+            </div>
+        </div>
+    </div>
+    <!-- Elemento de áudio oculto -->
+    <audio id="tetrisTheme" loop>
+        <!-- Substitua pelo URL real da música de Tetris -->
+        <source src="TETRIS.mp3" type="audio/mpeg">
+        <!-- Nota: Você precisará hospedar o arquivo de áudio ou usar uma URL válida -->
+    </audio>
+    <script>
+        // Configurações do jogo
+        const canvas = document.getElementById('tetris');
+        const context = canvas.getContext('2d');
+        const scoreElement = document.getElementById('score');
+        const levelElement = document.getElementById('level');
+        const startBtn = document.getElementById('startBtn');
+        // Elementos de áudio
+        const tetrisTheme = document.getElementById('tetrisTheme');
+        const musicToggle = document.getElementById('musicToggle');
+        const volumeControl = document.getElementById('volumeControl');
+        let isMusicPlaying = false;
+        // Configuração de áudio
+        tetrisTheme.volume = volumeControl.value;
+        // Event listener para o botão de música
+        musicToggle.addEventListener('click', () => {
+            if (isMusicPlaying) {
+                tetrisTheme.pause();
+                musicToggle.textContent = "Música: Off";
+            } else {
+                tetrisTheme.play().catch(e => {
+                    console.log("Reprodução automática bloqueada pelo navegador. Interaja com a página primeiro.");
+                });
+                musicToggle.textContent = "Música: On";
+            }
+            isMusicPlaying = !isMusicPlaying;
+        });
+        // Event listener para o controle de volume
+        volumeControl.addEventListener('input', () => {
+            tetrisTheme.volume = volumeControl.value;
+        });
+        // Tamanho de cada bloco
+        const blockSize = 30;
+        const boardWidth = canvas.width / blockSize;
+        const boardHeight = canvas.height / blockSize;
+        // Tabuleiro de jogo
+        let board = createBoard();
+        // Peças do Tetris e suas cores
+        const tetrominoes = [
+            { shape: [[1, 1, 1, 1]], color: '#00FFFF' },               // I
+            { shape: [[1, 1], [1, 1]], color: '#FFFF00' },             // O
+            { shape: [[0, 1, 0], [1, 1, 1]], color: '#800080' },       // T
+            { shape: [[0, 1, 1], [1, 1, 0]], color: '#00FF00' },       // S
+            { shape: [[1, 1, 0], [0, 1, 1]], color: '#FF0000' },       // Z
+            { shape: [[1, 0, 0], [1, 1, 1]], color: '#0000FF' },       // J
+            { shape: [[0, 0, 1], [1, 1, 1]], color: '#FF7F00' }        // L
+        ];
+        // Estado do jogo
+        let gameState = {
+            currentPiece: null,
+            position: {x: 0, y: 0},
+            score: 0,
+            level: 1,
+            speed: 1000,
+            isGameOver: false,
+            isPaused: true,
+            dropCounter: 0,
+            lastTime: 0
+        };
+        // Cria um novo tabuleiro vazio
+        function createBoard() {
+            return Array.from(Array(boardHeight), () => Array(boardWidth).fill(0));
+        }
+        // Gera uma nova peça aleatória
+        function getRandomPiece() {
+            const index = Math.floor(Math.random() * tetrominoes.length);
+            return {
+                shape: tetrominoes[index].shape,
+                color: tetrominoes[index].color
+            };
+        }
+        // Verifica se uma peça colide com algo no tabuleiro
+        function collides(position) {
+            if (!gameState.currentPiece) return true; // Retorna colisão se não houver peça
+            for (let y = 0; y < gameState.currentPiece.shape.length; y++) {
+                for (let x = 0; x < gameState.currentPiece.shape[y].length; x++) {
+                    if (gameState.currentPiece.shape[y][x] !== 0 &&
+                        // Verifica limites do tabuleiro
+                        (board[y + position.y] === undefined ||
+                         board[y + position.y][x + position.x] === undefined ||
+                         // Verifica colisões com peças existentes
+                         board[y + position.y][x + position.x] !== 0)) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+        // Rotaciona uma peça
+        function rotatePiece() {
+            if (!gameState.currentPiece) return; // Sai se não houver peça
+            const rotated = [];
+            for (let i = 0; i < gameState.currentPiece.shape[0].length; i++) {
+                const row = [];
+                for (let j = gameState.currentPiece.shape.length - 1; j >= 0; j--) {
+                    row.push(gameState.currentPiece.shape[j][i]);
+                }
+                rotated.push(row);
+            }
+            // Salva a forma atual para restaurá-la em caso de colisão
+            const originalShape = gameState.currentPiece.shape;
+            gameState.currentPiece.shape = rotated;
+            // Se a rotação causa uma colisão, restauramos a forma original
+            if (collides(gameState.position)) {
+                gameState.currentPiece.shape = originalShape;
+            }
+        }
+        // Mescla a peça atual ao tabuleiro
+        function mergePiece() {
+            gameState.currentPiece.shape.forEach((row, y) => {
+                row.forEach((value, x) => {
+                    if (value !== 0) {
+                        board[y + gameState.position.y][x + gameState.position.x] = gameState.currentPiece.color;
+                    }
+                });
+            });
+        }
+        // Move a peça se não houver colisão
+        function movePiece(dir) {
+            if (!gameState.currentPiece) return; // Sai se não houver peça
+            gameState.position.x += dir;
+            if (collides(gameState.position)) {
+                gameState.position.x -= dir;
+            }
+        }
+        // Desce a peça uma linha
+        function dropPiece() {
+            if (!gameState.currentPiece) return; // Sai se não houver peça
+            gameState.position.y++;
+            if (collides(gameState.position)) {
+                gameState.position.y--;
+                mergePiece();
+                checkLines();
+                resetPiece();
+                return false;
+            }
+            return true;
+        }
+        // Queda rápida da peça
+        function hardDrop() {
+            while (dropPiece()) {
+                // Continua descendo até colidir
+            }
+        }
+        // Verifica e remove linhas completas
+        function checkLines() {
+            let linesCleared = 0;
+            for (let y = board.length - 1; y >= 0; y--) {
+                // Verifica se a linha está completa
+                if (board[y].every(value => value !== 0)) {
+                    // Remove a linha completa
+                    board.splice(y, 1);
+                    // Adiciona uma nova linha no topo
+                    board.unshift(Array(boardWidth).fill(0));
+                    y++; // Processa a mesma posição y novamente
+                    linesCleared++;
+                }
+            }
+            // Atualiza a pontuação baseada nas linhas removidas
+            if (linesCleared > 0) {
+                // Mais pontos para mais linhas de uma vez
+                const points = [0, 100, 300, 500, 800][linesCleared] * gameState.level;
+                gameState.score += points;
+                scoreElement.textContent = gameState.score;
+                // Aumenta o nível a cada 10 linhas
+                if (gameState.score >= gameState.level * 1000) {
+                    gameState.level++;
+                    levelElement.textContent = gameState.level;
+                    gameState.speed = 1000 - (gameState.level - 1) * 100;
+                    if (gameState.speed < 100) gameState.speed = 100; // Velocidade mínima
+                }
+            }
+        }
+        // Reseta para uma nova peça
+        function resetPiece() {
+            gameState.currentPiece = getRandomPiece();
+            gameState.position = {
+                x: Math.floor(boardWidth / 2) - Math.floor(gameState.currentPiece.shape[0].length / 2),
+                y: 0
+            };
+            // Game over se a nova peça colidir logo ao começar
+            if (collides(gameState.position)) {
+                gameState.isGameOver = true;
+                // Pausa a música quando o jogo acaba
+                if (isMusicPlaying) {
+                    tetrisTheme.pause();
+                    musicToggle.textContent = "Música: Off";
+                    isMusicPlaying = false;
+                }
+            }
+        }
+        // Desenha o tabuleiro
+        function drawBoard() {
+            for (let y = 0; y < board.length; y++) {
+                for (let x = 0; x < board[y].length; x++) {
+                    if (board[y][x] !== 0) {
+                        context.fillStyle = board[y][x];
+                        context.fillRect(x * blockSize, y * blockSize, blockSize, blockSize);
+                        context.strokeStyle = '#333';
+                        context.strokeRect(x * blockSize, y * blockSize, blockSize, blockSize);
+                    }
+                }
+            }
+        }
+        // Desenha a peça atual
+        function drawPiece() {
+            if (!gameState.currentPiece) return; // Sai se não houver peça
+            context.fillStyle = gameState.currentPiece.color;
+            gameState.currentPiece.shape.forEach((row, y) => {
+                row.forEach((value, x) => {
+                    if (value !== 0) {
+                        context.fillRect(
+                            (x + gameState.position.x) * blockSize,
+                            (y + gameState.position.y) * blockSize,
+                            blockSize, blockSize
+                        );
+                        context.strokeStyle = '#333';
+                        context.strokeRect(
+                            (x + gameState.position.x) * blockSize,
+                            (y + gameState.position.y) * blockSize,
+                            blockSize, blockSize
+                        );
+                    }
+                });
+            });
+        }
+        // Desenha mensagem de game over
+        function drawGameOver() {
+            context.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            context.fillRect(0, 0, canvas.width, canvas.height);
+            context.fillStyle = '#fff';
+            context.font = '30px Arial';
+            context.textAlign = 'center';
+            context.fillText('GAME OVER', canvas.width / 2, canvas.height / 2 - 30);
+            context.font = '20px Arial';
+            context.fillText(`Pontuação: ${gameState.score}`, canvas.width / 2, canvas.height / 2 + 10);
+            context.fillText('Clique em Iniciar para jogar novamente', canvas.width / 2, canvas.height / 2 + 50);
+        }
+        // Desenha o estado inicial
+        function drawStartScreen() {
+            context.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            context.fillRect(0, 0, canvas.width, canvas.height);
+            context.fillStyle = '#fff';
+            context.font = '30px Arial';
+            context.textAlign = 'center';
+            context.fillText('TETRIS', canvas.width / 2, canvas.height / 2 - 30);
+            context.font = '20px Arial';
+            context.fillText('Clique em Iniciar para jogar', canvas.width / 2, canvas.height / 2 + 10);
+        }
+        // Limpa o canvas
+        function clearCanvas() {
+            context.fillStyle = '#000';
+            context.fillRect(0, 0, canvas.width, canvas.height);
+        }
+        // Loop principal do jogo
+        function update(time = 0) {
+            const deltaTime = time - gameState.lastTime;
+            gameState.lastTime = time;
+            clearCanvas();
+            if (!gameState.isPaused && !gameState.isGameOver) {
+                gameState.dropCounter += deltaTime;
+                if (gameState.dropCounter > gameState.speed) {
+                    dropPiece();
+                    gameState.dropCounter = 0;
+                }
+                drawBoard();
+                drawPiece();
+            } else if (gameState.isGameOver) {
+                drawBoard(); // Mostra o estado final do tabuleiro
+                drawGameOver(); // Desenha a tela de game over por cima
+            } else if (gameState.isPaused) {
+                drawStartScreen();
+            }
+            requestAnimationFrame(update);
+        }
+        // Iniciar/Reiniciar o jogo
+        function startGame() {
+            board = createBoard();
+            gameState = {
+                currentPiece: getRandomPiece(),
+                position: {
+                    x: Math.floor(boardWidth / 2) - Math.floor(getRandomPiece().shape[0].length / 2),
+                    y: 0
+                },
+                score: 0,
+                level: 1,
+                speed: 1000,
+                isGameOver: false,
+                isPaused: false,
+                dropCounter: 0,
+                lastTime: 0
+            };
+            scoreElement.textContent = gameState.score;
+            levelElement.textContent = gameState.level;
+            // Inicia a música se o botão estiver ativado
+            if (isMusicPlaying) {
+                tetrisTheme.currentTime = 0; // Reinicia a música
+                tetrisTheme.play().catch(e => {
+                    console.log("Reprodução automática bloqueada pelo navegador.");
+                });
+            }
+        }
+        // Event listeners
+        document.addEventListener('keydown', event => {
+            if (gameState.isPaused || gameState.isGameOver) return;
+            switch (event.keyCode) {
+                case 37: // Esquerda
+                    movePiece(-1);
+                    break;
+                case 39: // Direita
+                    movePiece(1);
+                    break;
+                case 40: // Baixo
+                    dropPiece();
+                    break;
+                case 38: // Cima (Rotaciona)
+                    rotatePiece();
+                    break;
+                case 32: // Espaço (Hard drop)
+                    hardDrop();
+                    break;
+            }
+        });
+        startBtn.addEventListener('click', () => {
+            if (gameState.isGameOver || gameState.isPaused) {
+                startGame();
+            } else {
+                gameState.isPaused = true;
+                // Pausa a música quando o jogo é pausado
+                if (isMusicPlaying) {
+                    tetrisTheme.pause();
+                }
+            }
+        });
+        // Event listeners para botões virtuais
+        document.getElementById('leftBtn').addEventListener('click', () => {
+            if (!gameState.isPaused && !gameState.isGameOver) movePiece(-1);
+        });
+        document.getElementById('rightBtn').addEventListener('click', () => {
+            if (!gameState.isPaused && !gameState.isGameOver) movePiece(1);
+        });
+        document.getElementById('downBtn').addEventListener('click', () => {
+            if (!gameState.isPaused && !gameState.isGameOver) dropPiece();
+        });
+        document.getElementById('rotateBtn').addEventListener('click', () => {
+            if (!gameState.isPaused && !gameState.isGameOver) rotatePiece();
+        });
+        document.getElementById('dropBtn').addEventListener('click', () => {
+            if (!gameState.isPaused && !gameState.isGameOver) hardDrop();
+        });
+        // Inicia o loop do jogo
+        drawStartScreen();
+        update();
+    </script>
+</body>
+</html>
